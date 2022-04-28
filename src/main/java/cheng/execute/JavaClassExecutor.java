@@ -7,7 +7,7 @@ public class JavaClassExecutor {
     public static String execute(byte[] bytes, String systemIn) {
         ClassModifier classModifier = new ClassModifier(bytes);
         byte[] modifyBytes = classModifier.modifyUTF8Constant("java/lang/System", "cheng/execute/HackSystem");
-        modifyBytes = classModifier.modifyUTF8Constant("java/util/Scanner", "chang/execute/HackScanner");
+        modifyBytes = classModifier.modifyUTF8Constant("java/util/Scanner", "cheng/execute/HackScanner");
 
         ((HackInputStream) HackSystem.in).set(systemIn);
 
