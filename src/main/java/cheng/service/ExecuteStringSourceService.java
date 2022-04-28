@@ -4,8 +4,10 @@ import cheng.compile.StringSourceCompiler;
 import cheng.execute.JavaClassExecutor;
 import org.springframework.stereotype.Service;
 
+import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaFileObject;
+import java.util.List;
 import java.util.concurrent.*;
 
 @Service
@@ -28,7 +30,15 @@ public class ExecuteStringSourceService {
         byte[] classBytes = StringSourceCompiler.compile(source, compileCollector);
 
         if (classBytes == null) {
-            return NO_OUTPUT;
+            List<Diagnostic<? extends JavaFileObject>> compileError = compileCollector.getDiagnostics();
+            StringBuilder compileErrorRes = new StringBuilder();
+            for (Diagnostic<? extends JavaFileObject> diagnostic : compileError) {
+                compileErrorRes.append("Compilation error at ");
+                compileErrorRes.append(diagnostic.getLineNumber());
+                compileErrorRes.append(".");
+                compileErrorRes.append(System.lineSeparator());
+            }
+            return compileErrorRes.toString();
         }
 
         Callable<String> runTask = () -> JavaClassExecutor.execute(classBytes, systemIn);
