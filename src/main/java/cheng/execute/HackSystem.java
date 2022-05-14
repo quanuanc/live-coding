@@ -1,7 +1,5 @@
 package cheng.execute;
 
-import sun.reflect.CallerSensitive;
-
 import java.io.Console;
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,8 +24,6 @@ public class HackSystem {
         out.close();
     }
 
-    private static volatile SecurityManager security = null;
-
     public static void setIn(InputStream in) {
         throw new SecurityException("Use hazardous method: System.setIn().");
     }
@@ -48,13 +44,6 @@ public class HackSystem {
         throw new SecurityException("Use hazardous method: System.inheritedChannel().");
     }
 
-    public static void setSecurityManager(final SecurityManager s) {
-        throw new SecurityException("Use hazardous method: System.setSecurityManager().");
-    }
-
-    public static SecurityManager getSecurityManager() {
-        throw new SecurityException("Use hazardous method: System.getSecurityManager().");
-    }
 
     public static long currentTimeMillis() {
         return System.currentTimeMillis();
@@ -125,15 +114,6 @@ public class HackSystem {
         throw new SecurityException("Use hazardous method: System.runFinalizersOnExit().");
     }
 
-    @CallerSensitive
-    public static void load(String filename) {
-        throw new SecurityException("Use hazardous method: System.load().");
-    }
-
-    @CallerSensitive
-    public static void loadLibrary(String libname) {
-        throw new SecurityException("Use hazardous method: System.loadLibrary().");
-    }
 
     public static String mapLibraryName(String libname) {
         throw new SecurityException("Use hazardous method: System.mapLibraryName().");
