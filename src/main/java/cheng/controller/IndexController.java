@@ -18,7 +18,7 @@ public class IndexController {
     private static final String DEFAULT_SOURCE = """
             public class Run {
                 public static void main(String[] args){
-                    
+                    System.out.println("Hello From live-coding!");
                 }
             }
             """;
