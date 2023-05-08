@@ -18,16 +18,24 @@ public class RunCodeController {
     private final ExecuteStringSourceService executeStringSourceService;
 
     private static final String DEFAULT_SOURCE = """
+            import java.util.Scanner;
+
             public class Run {
                 public static void main(String[] args){
-                    System.out.println("Hello From live-coding!");
+                    Scanner sc = new Scanner(System.in);
+                    String name = sc.nextLine();
+                    System.out.println("Hello from live-coding!");
+                    System.out.println("Good morning, " + name + "!");
                 }
             }
             """;
 
+    private static final String DEFAULT_SYSTEM_IN = "bro";
+
     @GetMapping("/")
     public String entry(Model model) {
         model.addAttribute("lastSource", DEFAULT_SOURCE);
+        model.addAttribute("lastSystemIn", DEFAULT_SYSTEM_IN);
         return "ide";
     }
 
