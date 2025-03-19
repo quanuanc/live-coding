@@ -6,8 +6,8 @@ import java.io.InterruptedIOException;
 import java.io.PrintStream;
 
 public class HackPrintStream extends PrintStream {
-    private ThreadLocal<ByteArrayOutputStream> out;
-    private ThreadLocal<Boolean> trouble;
+    private final ThreadLocal<ByteArrayOutputStream> out;
+    private final ThreadLocal<Boolean> trouble;
 
     public HackPrintStream() {
         super(new ByteArrayOutputStream());
@@ -156,7 +156,7 @@ public class HackPrintStream extends PrintStream {
      * @param off Offset from which to start taking bytes
      * @param len Number of bytes to write
      */
-    public void write(byte buf[], int off, int len) {
+    public void write(byte[] buf, int off, int len) {
         try {
             ensureOpen();
             out.get().write(buf, off, len);
@@ -173,7 +173,7 @@ public class HackPrintStream extends PrintStream {
      * stream occur as promptly as with the original PrintStream.
      */
 
-    private void write(char buf[]) {
+    private void write(char[] buf) {
         try {
             ensureOpen();
             out.get().write(new String(buf).getBytes());
@@ -298,7 +298,7 @@ public class HackPrintStream extends PrintStream {
      * @param s The array of chars to be printed
      * @throws NullPointerException If <code>s</code> is <code>null</code>
      */
-    public void print(char s[]) {
+    public void print(char[] s) {
         write(s);
     }
 
@@ -424,7 +424,7 @@ public class HackPrintStream extends PrintStream {
      *
      * @param x an array of chars to print.
      */
-    public void println(char x[]) {
+    public void println(char[] x) {
         print(x);
         newLine();
     }

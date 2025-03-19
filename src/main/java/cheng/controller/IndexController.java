@@ -7,14 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/index")
+@RequestMapping("/api")
 public class IndexController {
-    @Autowired
-    public IndexController(ExecuteStringSourceService executeStringSourceService) {
-        this.executeStringSourceService = executeStringSourceService;
-    }
-
-    private final ExecuteStringSourceService executeStringSourceService;
     private static final String DEFAULT_SOURCE = """
             public class Run {
                 public static void main(String[] args){
@@ -22,7 +16,11 @@ public class IndexController {
                 }
             }
             """;
-
+    private final ExecuteStringSourceService executeStringSourceService;
+    @Autowired
+    public IndexController(ExecuteStringSourceService executeStringSourceService) {
+        this.executeStringSourceService = executeStringSourceService;
+    }
 
     @GetMapping
     public Output home() {

@@ -21,8 +21,6 @@ public class ExecuteStringSourceService {
 
     private static final String NO_OUTPUT = "Nothing.";
 
-//    private static final ExecutorService pool = new ThreadPoolExecutor(N_THREAD, N_THREAD,
-//            0L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(N_THREAD));
     private static final ExecutorService pool = Executors.newFixedThreadPool(N_THREAD);
 
     public String execute(String source, String systemIn) {

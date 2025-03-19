@@ -19,7 +19,8 @@ public class StringSourceCompiler {
 
     public static byte[] compile(String source, DiagnosticCollector<JavaFileObject> diagnosticCollector) {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
-        JavaFileManager javaFileManager = new TmpJavaFileManager(compiler.getStandardFileManager(diagnosticCollector, null, null));
+        JavaFileManager javaFileManager = new TmpJavaFileManager(compiler.getStandardFileManager(diagnosticCollector,
+                null, null));
         Matcher matcher = CLASS_PATTERN.matcher(source);
         String className;
         if (matcher.find())
@@ -28,7 +29,8 @@ public class StringSourceCompiler {
             throw new IllegalArgumentException("No valid class");
 
         JavaFileObject sourceJavaFileObject = new TmpJavaFileObject(className, source);
-        Boolean result = compiler.getTask(null, javaFileManager, diagnosticCollector, null, null, Collections.singletonList(sourceJavaFileObject)).call();
+        Boolean result = compiler.getTask(null, javaFileManager, diagnosticCollector, null, null,
+                Collections.singletonList(sourceJavaFileObject)).call();
 
         JavaFileObject bytesJavaFileObject = fileObjectMap.get(className);
         if (result && bytesJavaFileObject != null)
@@ -42,7 +44,8 @@ public class StringSourceCompiler {
         }
 
         @Override
-        public JavaFileObject getJavaFileForInput(JavaFileManager.Location location, String className, JavaFileObject.Kind kind) throws IOException {
+        public JavaFileObject getJavaFileForInput(JavaFileManager.Location location, String className,
+                                                  JavaFileObject.Kind kind) throws IOException {
             JavaFileObject javaFileObject = fileObjectMap.get(className);
             if (javaFileObject == null) {
                 return super.getJavaFileForInput(location, className, kind);
@@ -51,7 +54,8 @@ public class StringSourceCompiler {
         }
 
         @Override
-        public JavaFileObject getJavaFileForOutput(JavaFileManager.Location location, String className, JavaFileObject.Kind kind, FileObject sibling) {
+        public JavaFileObject getJavaFileForOutput(JavaFileManager.Location location, String className,
+                                                   JavaFileObject.Kind kind, FileObject sibling) {
             JavaFileObject javaFileObject = new TmpJavaFileObject(className, kind);
             fileObjectMap.put(className, javaFileObject);
             return javaFileObject;

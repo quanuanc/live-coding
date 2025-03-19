@@ -1,7 +1,7 @@
 package cheng.controller;
 
 import cheng.service.ExecuteStringSourceService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,17 +9,11 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 @Controller
+@RequiredArgsConstructor
 public class RunCodeController {
-    @Autowired
-    public RunCodeController(ExecuteStringSourceService executeStringSourceService) {
-        this.executeStringSourceService = executeStringSourceService;
-    }
-
-    private final ExecuteStringSourceService executeStringSourceService;
-
     private static final String DEFAULT_SOURCE = """
             import java.util.Scanner;
-
+            
             public class Run {
                 public static void main(String[] args){
                     Scanner sc = new Scanner(System.in);
@@ -29,8 +23,8 @@ public class RunCodeController {
                 }
             }
             """;
-
     private static final String DEFAULT_SYSTEM_IN = "bro";
+    private final ExecuteStringSourceService executeStringSourceService;
 
     @GetMapping("/")
     public String entry(Model model) {

@@ -24,225 +24,100 @@ import java.util.stream.StreamSupport;
 
 public final class HackScanner implements Iterator<String>, Closeable {
 
-    // Internal buffer used to hold input
-    private CharBuffer buf;
-
     // Size of internal character buffer
     private static final int BUFFER_SIZE = 1024; // change to 1024;
-
-    // The index into the buffer currently held by the Scanner
-    private int position;
-
-    // Internal matcher used for finding delimiters
-    private Matcher matcher;
-
-    // Pattern used to delimit tokens
-    private Pattern delimPattern;
-
-    // Pattern found in last hasNext operation
-    private Pattern hasNextPattern;
-
-    // Position after last hasNext operation
-    private int hasNextPosition;
-
-    // Result after last hasNext operation
-    private String hasNextResult;
-
-    // The input source
-    private Readable source;
-
-    // Boolean is true if source is done
-    private boolean sourceClosed = false;
-
-    // Boolean indicating more input is required
-    private boolean needInput = false;
-
-    // Boolean indicating if a delim has been skipped this operation
-    private boolean skipped = false;
-
-    // A store of a position that the HackScanner may fall back to
-    private int savedScannerPosition = -1;
-
-    // A cache of the last primitive type scanned
-    private Object typeCache = null;
-
-    // Boolean indicating if a match result is available
-    private boolean matchValid = false;
-
-    // Boolean indicating if this HackScanner has been closed
-    private boolean closed = false;
-
-    // The current radix used by this scanner
-    private int radix = 10;
-
-    // The default radix for this scanner
-    private int defaultRadix = 10;
-
-    // The locale used by this scanner
-    private Locale locale = null;
-
-    // A cache of the last few recently used Patterns
-    private PatternLRUCache patternCache = new PatternLRUCache(7);
-
-    // A holder of the last IOException encountered
-    private IOException lastException;
-
-    // Number of times this scanner's state has been modified.
-    // Generally incremented on most public APIs and checked
-    // within spliterator implementations.
-    int modCount;
-
+    private static final String BOOLEAN_PATTERN = "true|false";
+    private static final String LINE_SEPARATOR_PATTERN = "\r\n|[\n\r\u2028\u2029\u0085]";
+    private static final String LINE_PATTERN = ".*(" + LINE_SEPARATOR_PATTERN + ")|.+$";
     // A pattern for java whitespace
-    private static Pattern WHITESPACE_PATTERN = Pattern.compile(
-            "\\p{javaWhitespace}+");
-
+    private static final Pattern WHITESPACE_PATTERN = Pattern.compile("\\p{javaWhitespace}+");
     // A pattern for any token
-    private static Pattern FIND_ANY_PATTERN = Pattern.compile("(?s).*");
-
+    private static final Pattern FIND_ANY_PATTERN = Pattern.compile("(?s).*");
     // A pattern for non-ASCII digits
-    private static Pattern NON_ASCII_DIGIT = Pattern.compile(
-            "[\\p{javaDigit}&&[^0-9]]");
-
-    // Fields and methods to support scanning primitive types
-
-    /**
-     * Locale dependent values used to scan numbers
-     */
-    private String groupSeparator = "\\,";
-    private String decimalSeparator = "\\.";
-    private String nanString = "NaN";
-    private String infinityString = "Infinity";
-    private String positivePrefix = "";
-    private String negativePrefix = "\\-";
-    private String positiveSuffix = "";
-    private String negativeSuffix = "";
-
+    private static final Pattern NON_ASCII_DIGIT = Pattern.compile("[\\p{javaDigit}&&[^0-9]]");
     /**
      * Fields and an accessor method to match booleans
      */
     private static volatile Pattern boolPattern;
-    private static final String BOOLEAN_PATTERN = "true|false";
-    private static Pattern boolPattern() {
-        Pattern bp = boolPattern;
-        if (bp == null)
-            boolPattern = bp = Pattern.compile(BOOLEAN_PATTERN,
-                    Pattern.CASE_INSENSITIVE);
-        return bp;
-    }
-
-    /**
-     * Fields and methods to match bytes, shorts, ints, and longs
-     */
-    private Pattern integerPattern;
-    private String digits = "0123456789abcdefghijklmnopqrstuvwxyz";
-    private String non0Digit = "[\\p{javaDigit}&&[^0]]";
-    private int SIMPLE_GROUP_INDEX = 5;
-    private String buildIntegerPatternString() {
-        String radixDigits = digits.substring(0, radix);
-        // \\p{javaDigit} is not guaranteed to be appropriate
-        // here but what can we do? The final authority will be
-        // whatever parse method is invoked, so ultimately the
-        // HackScanner will do the right thing
-        String digit = "((?i)["+radixDigits+"\\p{javaDigit}])";
-        String groupedNumeral = "("+non0Digit+digit+"?"+digit+"?("+
-                groupSeparator+digit+digit+digit+")+)";
-        // digit++ is the possessive form which is necessary for reducing
-        // backtracking that would otherwise cause unacceptable performance
-        String numeral = "(("+ digit+"++)|"+groupedNumeral+")";
-        String javaStyleInteger = "([-+]?(" + numeral + "))";
-        String negativeInteger = negativePrefix + numeral + negativeSuffix;
-        String positiveInteger = positivePrefix + numeral + positiveSuffix;
-        return "("+ javaStyleInteger + ")|(" +
-                positiveInteger + ")|(" +
-                negativeInteger + ")";
-    }
-    private Pattern integerPattern() {
-        if (integerPattern == null) {
-            integerPattern = patternCache.forName(buildIntegerPatternString());
-        }
-        return integerPattern;
-    }
-
     /**
      * Fields and an accessor method to match line separators
      */
     private static volatile Pattern separatorPattern;
     private static volatile Pattern linePattern;
-    private static final String LINE_SEPARATOR_PATTERN =
-            "\r\n|[\n\r\u2028\u2029\u0085]";
-    private static final String LINE_PATTERN = ".*("+LINE_SEPARATOR_PATTERN+")|.+$";
+    // Number of times this scanner's state has been modified.
+    // Generally incremented on most public APIs and checked
+    // within spliterator implementations.
+    int modCount;
+    // Internal buffer used to hold input
+    private CharBuffer buf;
+    // The index into the buffer currently held by the Scanner
+    private int position;
+    // Internal matcher used for finding delimiters
+    private final Matcher matcher;
+    // Pattern used to delimit tokens
+    private Pattern delimPattern;
+    // Pattern found in last hasNext operation
+    private Pattern hasNextPattern;
+    // Position after last hasNext operation
+    private int hasNextPosition;
+    // Result after last hasNext operation
+    private String hasNextResult;
+    // The input source
+    private Readable source;
+    // Boolean is true if source is done
+    private boolean sourceClosed = false;
+    // Boolean indicating more input is required
+    private boolean needInput = false;
+    // Boolean indicating if a delim has been skipped this operation
+    private boolean skipped = false;
+    // A store of a position that the HackScanner may fall back to
+    private int savedScannerPosition = -1;
+    // A cache of the last primitive type scanned
+    private Object typeCache = null;
+    // Boolean indicating if a match result is available
+    private boolean matchValid = false;
 
-    private static Pattern separatorPattern() {
-        Pattern sp = separatorPattern;
-        if (sp == null)
-            separatorPattern = sp = Pattern.compile(LINE_SEPARATOR_PATTERN);
-        return sp;
-    }
-
-    private static Pattern linePattern() {
-        Pattern lp = linePattern;
-        if (lp == null)
-            linePattern = lp = Pattern.compile(LINE_PATTERN);
-        return lp;
-    }
-
+    // Fields and methods to support scanning primitive types
+    // Boolean indicating if this HackScanner has been closed
+    private boolean closed = false;
+    // The current radix used by this scanner
+    private int radix = 10;
+    // The default radix for this scanner
+    private int defaultRadix = 10;
+    // The locale used by this scanner
+    private final Locale locale = null;
+    // A cache of the last few recently used Patterns
+    private final PatternLRUCache patternCache = new PatternLRUCache(7);
+    // A holder of the last IOException encountered
+    private IOException lastException;
+    /**
+     * Locale dependent values used to scan numbers
+     */
+    private final String groupSeparator = "\\,";
+    private final String decimalSeparator = "\\.";
+    private final String nanString = "NaN";
+    private final String infinityString = "Infinity";
+    private final String positivePrefix = "";
+    private final String negativePrefix = "\\-";
+    private final String positiveSuffix = "";
+    private final String negativeSuffix = "";
+    /**
+     * Fields and methods to match bytes, shorts, ints, and longs
+     */
+    private Pattern integerPattern;
+    private final String digits = "0123456789abcdefghijklmnopqrstuvwxyz";
+    private final String non0Digit = "[\\p{javaDigit}&&[^0]]";
+    private final int SIMPLE_GROUP_INDEX = 5;
     /**
      * Fields and methods to match floats and doubles
      */
     private Pattern floatPattern;
     private Pattern decimalPattern;
-    private void buildFloatAndDecimalPattern() {
-        // \\p{javaDigit} may not be perfect, see above
-        String digit = "(([0-9\\p{javaDigit}]))";
-        String exponent = "([eE][+-]?"+digit+"+)?";
-        String groupedNumeral = "("+non0Digit+digit+"?"+digit+"?("+
-                groupSeparator+digit+digit+digit+")+)";
-        // Once again digit++ is used for performance, as above
-        String numeral = "(("+digit+"++)|"+groupedNumeral+")";
-        String decimalNumeral = "("+numeral+"|"+numeral +
-                decimalSeparator + digit + "*+|"+ decimalSeparator +
-                digit + "++)";
-        String nonNumber = "(NaN|"+nanString+"|Infinity|"+
-                infinityString+")";
-        String positiveFloat = "(" + positivePrefix + decimalNumeral +
-                positiveSuffix + exponent + ")";
-        String negativeFloat = "(" + negativePrefix + decimalNumeral +
-                negativeSuffix + exponent + ")";
-        String decimal = "(([-+]?" + decimalNumeral + exponent + ")|"+
-                positiveFloat + "|" + negativeFloat + ")";
-        String hexFloat =
-                "[-+]?0[xX][0-9a-fA-F]*\\.[0-9a-fA-F]+([pP][-+]?[0-9]+)?";
-        String positiveNonNumber = "(" + positivePrefix + nonNumber +
-                positiveSuffix + ")";
-        String negativeNonNumber = "(" + negativePrefix + nonNumber +
-                negativeSuffix + ")";
-        String signedNonNumber = "(([-+]?"+nonNumber+")|" +
-                positiveNonNumber + "|" +
-                negativeNonNumber + ")";
-        floatPattern = Pattern.compile(decimal + "|" + hexFloat + "|" +
-                signedNonNumber);
-        decimalPattern = Pattern.compile(decimal);
-    }
-    private Pattern floatPattern() {
-        if (floatPattern == null) {
-            buildFloatAndDecimalPattern();
-        }
-        return floatPattern;
-    }
-    private Pattern decimalPattern() {
-        if (decimalPattern == null) {
-            buildFloatAndDecimalPattern();
-        }
-        return decimalPattern;
-    }
-
-    // Constructors
-
     /**
      * Constructs a {@code Scanner} that returns values scanned
      * from the specified source delimited by the specified pattern.
      *
-     * @param source A character source implementing the Readable interface
+     * @param source  A character source implementing the Readable interface
      * @param pattern A delimiting pattern
      */
     private HackScanner(Readable source, Pattern pattern) {
@@ -262,8 +137,8 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * Constructs a new {@code Scanner} that produces values scanned
      * from the specified source.
      *
-     * @param  source A character source implementing the {@link Readable}
-     *         interface
+     * @param source A character source implementing the {@link Readable}
+     *               interface
      */
     public HackScanner(Readable source) {
         this(Objects.requireNonNull(source, "source"), WHITESPACE_PATTERN);
@@ -275,12 +150,12 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * into characters using the underlying platform's
      * {@linkplain java.nio.charset.Charset#defaultCharset() default charset}.
      *
-     * @param  source An input stream to be scanned
+     * @param source An input stream to be scanned
      */
     public HackScanner(InputStream source) {
 //        this(new InputStreamReader(source), WHITESPACE_PATTERN);
         this(new InputStreamReader(
-                (source instanceof HackInputStream) ? ((HackInputStream) source).get() : source),
+                        (source instanceof HackInputStream) ? ((HackInputStream) source).get() : source),
                 WHITESPACE_PATTERN
         );
     }
@@ -290,25 +165,24 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * from the specified input stream. Bytes from the stream are converted
      * into characters using the specified charset.
      *
-     * @param  source An input stream to be scanned
+     * @param source      An input stream to be scanned
      * @param charsetName The encoding type used to convert bytes from the
-     *        stream into characters to be scanned
+     *                    stream into characters to be scanned
      * @throws IllegalArgumentException if the specified character set
-     *         does not exist
+     *                                  does not exist
      */
     public HackScanner(InputStream source, String charsetName) {
         this(source, toCharset(charsetName));
     }
-
     /**
      * Constructs a new {@code Scanner} that produces values scanned
      * from the specified input stream. Bytes from the stream are converted
      * into characters using the specified charset.
      *
-     * @param  source an input stream to be scanned
-     * @param  charset the charset used to convert bytes from the file
-     *         into characters to be scanned
-     * @since  10
+     * @param source  an input stream to be scanned
+     * @param charset the charset used to convert bytes from the file
+     *                into characters to be scanned
+     * @since 10
      */
     public HackScanner(InputStream source, Charset charset) {
         this(makeReadable(Objects.requireNonNull(source, "source"), charset),
@@ -316,15 +190,190 @@ public final class HackScanner implements Iterator<String>, Closeable {
     }
 
     /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified file. Bytes from the file are converted into
+     * characters using the underlying platform's
+     * {@linkplain java.nio.charset.Charset#defaultCharset() default charset}.
+     *
+     * @param source A file to be scanned
+     * @throws FileNotFoundException if source is not found
+     */
+    public HackScanner(File source) throws FileNotFoundException {
+        this(new FileInputStream(source).getChannel());
+    }
+
+    /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified file. Bytes from the file are converted into
+     * characters using the specified charset.
+     *
+     * @param source      A file to be scanned
+     * @param charsetName The encoding type used to convert bytes from the file
+     *                    into characters to be scanned
+     * @throws FileNotFoundException    if source is not found
+     * @throws IllegalArgumentException if the specified encoding is
+     *                                  not found
+     */
+    public HackScanner(File source, String charsetName)
+            throws FileNotFoundException {
+        this(Objects.requireNonNull(source), toDecoder(charsetName));
+    }
+
+    /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified file. Bytes from the file are converted into
+     * characters using the specified charset.
+     *
+     * @param source  A file to be scanned
+     * @param charset The charset used to convert bytes from the file
+     *                into characters to be scanned
+     * @throws IOException if an I/O error occurs opening the source
+     * @since 10
+     */
+    public HackScanner(File source, Charset charset) throws IOException {
+        this(Objects.requireNonNull(source), charset.newDecoder());
+    }
+
+    // Constructors
+
+    private HackScanner(File source, CharsetDecoder dec)
+            throws FileNotFoundException {
+        this(makeReadable(new FileInputStream(source).getChannel(), dec));
+    }
+
+    /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified file. Bytes from the file are converted into
+     * characters using the underlying platform's
+     * {@linkplain java.nio.charset.Charset#defaultCharset() default charset}.
+     *
+     * @param source the path to the file to be scanned
+     * @throws IOException if an I/O error occurs opening source
+     * @since 1.7
+     */
+    public HackScanner(Path source)
+            throws IOException {
+        this(Files.newInputStream(source));
+    }
+
+    /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified file. Bytes from the file are converted into
+     * characters using the specified charset.
+     *
+     * @param source      the path to the file to be scanned
+     * @param charsetName The encoding type used to convert bytes from the file
+     *                    into characters to be scanned
+     * @throws IOException              if an I/O error occurs opening source
+     * @throws IllegalArgumentException if the specified encoding is not found
+     * @since 1.7
+     */
+    public HackScanner(Path source, String charsetName) throws IOException {
+        this(Objects.requireNonNull(source), toCharset(charsetName));
+    }
+
+    /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified file. Bytes from the file are converted into
+     * characters using the specified charset.
+     *
+     * @param source  the path to the file to be scanned
+     * @param charset the charset used to convert bytes from the file
+     *                into characters to be scanned
+     * @throws IOException if an I/O error occurs opening the source
+     * @since 10
+     */
+    public HackScanner(Path source, Charset charset) throws IOException {
+        this(makeReadable(source, charset));
+    }
+
+    /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified string.
+     *
+     * @param source A string to scan
+     */
+    public HackScanner(String source) {
+        this(new StringReader(source), WHITESPACE_PATTERN);
+    }
+
+    /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified channel. Bytes from the source are converted into
+     * characters using the underlying platform's
+     * {@linkplain java.nio.charset.Charset#defaultCharset() default charset}.
+     *
+     * @param source A channel to scan
+     */
+    public HackScanner(ReadableByteChannel source) {
+        this(makeReadable(Objects.requireNonNull(source, "source")),
+                WHITESPACE_PATTERN);
+    }
+
+    /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified channel. Bytes from the source are converted into
+     * characters using the specified charset.
+     *
+     * @param source      A channel to scan
+     * @param charsetName The encoding type used to convert bytes from the
+     *                    channel into characters to be scanned
+     * @throws IllegalArgumentException if the specified character set
+     *                                  does not exist
+     */
+    public HackScanner(ReadableByteChannel source, String charsetName) {
+        this(makeReadable(Objects.requireNonNull(source, "source"), toDecoder(charsetName)),
+                WHITESPACE_PATTERN);
+    }
+
+    /**
+     * Constructs a new {@code Scanner} that produces values scanned
+     * from the specified channel. Bytes from the source are converted into
+     * characters using the specified charset.
+     *
+     * @param source  a channel to scan
+     * @param charset the encoding type used to convert bytes from the
+     *                channel into characters to be scanned
+     * @since 10
+     */
+    public HackScanner(ReadableByteChannel source, Charset charset) {
+        this(makeReadable(Objects.requireNonNull(source, "source"), charset),
+                WHITESPACE_PATTERN);
+    }
+
+    private static Pattern boolPattern() {
+        Pattern bp = boolPattern;
+        if (bp == null)
+            boolPattern = bp = Pattern.compile(BOOLEAN_PATTERN,
+                    Pattern.CASE_INSENSITIVE);
+        return bp;
+    }
+
+    private static Pattern separatorPattern() {
+        Pattern sp = separatorPattern;
+        if (sp == null)
+            separatorPattern = sp = Pattern.compile(LINE_SEPARATOR_PATTERN);
+        return sp;
+    }
+
+    private static Pattern linePattern() {
+        Pattern lp = linePattern;
+        if (lp == null)
+            linePattern = lp = Pattern.compile(LINE_PATTERN);
+        return lp;
+    }
+
+    /**
      * Returns a charset object for the given charset name.
-     * @throws NullPointerException          is csn is null
-     * @throws IllegalArgumentException      if the charset is not supported
+     *
+     * @throws NullPointerException     is csn is null
+     * @throws IllegalArgumentException if the charset is not supported
      */
     private static Charset toCharset(String csn) {
         Objects.requireNonNull(csn, "charsetName");
         try {
             return Charset.forName(csn);
-        } catch (IllegalCharsetNameException|UnsupportedCharsetException e) {
+        } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
             // IllegalArgumentException should be thrown
             throw new IllegalArgumentException(e);
         }
@@ -345,64 +394,11 @@ public final class HackScanner implements Iterator<String>, Closeable {
         return new InputStreamReader(source, charset);
     }
 
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified file. Bytes from the file are converted into
-     * characters using the underlying platform's
-     * {@linkplain java.nio.charset.Charset#defaultCharset() default charset}.
-     *
-     * @param  source A file to be scanned
-     * @throws FileNotFoundException if source is not found
-     */
-    public HackScanner(File source) throws FileNotFoundException {
-        this((ReadableByteChannel)(new FileInputStream(source).getChannel()));
-    }
-
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified file. Bytes from the file are converted into
-     * characters using the specified charset.
-     *
-     * @param  source A file to be scanned
-     * @param charsetName The encoding type used to convert bytes from the file
-     *        into characters to be scanned
-     * @throws FileNotFoundException if source is not found
-     * @throws IllegalArgumentException if the specified encoding is
-     *         not found
-     */
-    public HackScanner(File source, String charsetName)
-            throws FileNotFoundException
-    {
-        this(Objects.requireNonNull(source), toDecoder(charsetName));
-    }
-
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified file. Bytes from the file are converted into
-     * characters using the specified charset.
-     *
-     * @param  source A file to be scanned
-     * @param  charset The charset used to convert bytes from the file
-     *         into characters to be scanned
-     * @throws IOException
-     *         if an I/O error occurs opening the source
-     * @since  10
-     */
-    public HackScanner(File source, Charset charset) throws IOException {
-        this(Objects.requireNonNull(source), charset.newDecoder());
-    }
-
-    private HackScanner(File source, CharsetDecoder dec)
-            throws FileNotFoundException
-    {
-        this(makeReadable((ReadableByteChannel)(new FileInputStream(source).getChannel()), dec));
-    }
-
     private static CharsetDecoder toDecoder(String charsetName) {
         Objects.requireNonNull(charsetName, "charsetName");
         try {
             return Charset.forName(charsetName).newDecoder();
-        } catch (IllegalCharsetNameException|UnsupportedCharsetException unused) {
+        } catch (IllegalCharsetNameException | UnsupportedCharsetException unused) {
             throw new IllegalArgumentException(charsetName);
         }
     }
@@ -418,119 +414,82 @@ public final class HackScanner implements Iterator<String>, Closeable {
         return Channels.newReader(source, charset);
     }
 
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified file. Bytes from the file are converted into
-     * characters using the underlying platform's
-     * {@linkplain java.nio.charset.Charset#defaultCharset() default charset}.
-     *
-     * @param   source
-     *          the path to the file to be scanned
-     * @throws  IOException
-     *          if an I/O error occurs opening source
-     *
-     * @since   1.7
-     */
-    public HackScanner(Path source)
-            throws IOException
-    {
-        this(Files.newInputStream(source));
-    }
-
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified file. Bytes from the file are converted into
-     * characters using the specified charset.
-     *
-     * @param   source
-     *          the path to the file to be scanned
-     * @param   charsetName
-     *          The encoding type used to convert bytes from the file
-     *          into characters to be scanned
-     * @throws  IOException
-     *          if an I/O error occurs opening source
-     * @throws  IllegalArgumentException
-     *          if the specified encoding is not found
-     * @since   1.7
-     */
-    public HackScanner(Path source, String charsetName) throws IOException {
-        this(Objects.requireNonNull(source), toCharset(charsetName));
-    }
-
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified file. Bytes from the file are converted into
-     * characters using the specified charset.
-     *
-     * @param   source
-     *          the path to the file to be scanned
-     * @param   charset
-     *          the charset used to convert bytes from the file
-     *          into characters to be scanned
-     * @throws  IOException
-     *          if an I/O error occurs opening the source
-     * @since   10
-     */
-    public HackScanner(Path source, Charset charset)  throws IOException {
-        this(makeReadable(source, charset));
-    }
-
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified string.
-     *
-     * @param  source A string to scan
-     */
-    public HackScanner(String source) {
-        this(new StringReader(source), WHITESPACE_PATTERN);
-    }
-
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified channel. Bytes from the source are converted into
-     * characters using the underlying platform's
-     * {@linkplain java.nio.charset.Charset#defaultCharset() default charset}.
-     *
-     * @param  source A channel to scan
-     */
-    public HackScanner(ReadableByteChannel source) {
-        this(makeReadable(Objects.requireNonNull(source, "source")),
-                WHITESPACE_PATTERN);
-    }
-
     private static Readable makeReadable(ReadableByteChannel source) {
         return makeReadable(source, Charset.defaultCharset().newDecoder());
     }
 
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified channel. Bytes from the source are converted into
-     * characters using the specified charset.
-     *
-     * @param  source A channel to scan
-     * @param charsetName The encoding type used to convert bytes from the
-     *        channel into characters to be scanned
-     * @throws IllegalArgumentException if the specified character set
-     *         does not exist
-     */
-    public HackScanner(ReadableByteChannel source, String charsetName) {
-        this(makeReadable(Objects.requireNonNull(source, "source"), toDecoder(charsetName)),
-                WHITESPACE_PATTERN);
+    private String buildIntegerPatternString() {
+        String radixDigits = digits.substring(0, radix);
+        // \\p{javaDigit} is not guaranteed to be appropriate
+        // here but what can we do? The final authority will be
+        // whatever parse method is invoked, so ultimately the
+        // HackScanner will do the right thing
+        String digit = "((?i)[" + radixDigits + "\\p{javaDigit}])";
+        String groupedNumeral = "(" + non0Digit + digit + "?" + digit + "?(" +
+                groupSeparator + digit + digit + digit + ")+)";
+        // digit++ is the possessive form which is necessary for reducing
+        // backtracking that would otherwise cause unacceptable performance
+        String numeral = "((" + digit + "++)|" + groupedNumeral + ")";
+        String javaStyleInteger = "([-+]?(" + numeral + "))";
+        String negativeInteger = negativePrefix + numeral + negativeSuffix;
+        String positiveInteger = positivePrefix + numeral + positiveSuffix;
+        return "(" + javaStyleInteger + ")|(" +
+                positiveInteger + ")|(" +
+                negativeInteger + ")";
     }
 
-    /**
-     * Constructs a new {@code Scanner} that produces values scanned
-     * from the specified channel. Bytes from the source are converted into
-     * characters using the specified charset.
-     *
-     * @param source a channel to scan
-     * @param charset the encoding type used to convert bytes from the
-     *        channel into characters to be scanned
-     * @since 10
-     */
-    public HackScanner(ReadableByteChannel source, Charset charset) {
-        this(makeReadable(Objects.requireNonNull(source, "source"), charset),
-                WHITESPACE_PATTERN);
+    private Pattern integerPattern() {
+        if (integerPattern == null) {
+            integerPattern = patternCache.forName(buildIntegerPatternString());
+        }
+        return integerPattern;
+    }
+
+    private void buildFloatAndDecimalPattern() {
+        // \\p{javaDigit} may not be perfect, see above
+        String digit = "(([0-9\\p{javaDigit}]))";
+        String exponent = "([eE][+-]?" + digit + "+)?";
+        String groupedNumeral = "(" + non0Digit + digit + "?" + digit + "?(" +
+                groupSeparator + digit + digit + digit + ")+)";
+        // Once again digit++ is used for performance, as above
+        String numeral = "((" + digit + "++)|" + groupedNumeral + ")";
+        String decimalNumeral = "(" + numeral + "|" + numeral +
+                decimalSeparator + digit + "*+|" + decimalSeparator +
+                digit + "++)";
+        String nonNumber = "(NaN|" + nanString + "|Infinity|" +
+                infinityString + ")";
+        String positiveFloat = "(" + positivePrefix + decimalNumeral +
+                positiveSuffix + exponent + ")";
+        String negativeFloat = "(" + negativePrefix + decimalNumeral +
+                negativeSuffix + exponent + ")";
+        String decimal = "(([-+]?" + decimalNumeral + exponent + ")|" +
+                positiveFloat + "|" + negativeFloat + ")";
+        String hexFloat =
+                "[-+]?0[xX][0-9a-fA-F]*\\.[0-9a-fA-F]+([pP][-+]?[0-9]+)?";
+        String positiveNonNumber = "(" + positivePrefix + nonNumber +
+                positiveSuffix + ")";
+        String negativeNonNumber = "(" + negativePrefix + nonNumber +
+                negativeSuffix + ")";
+        String signedNonNumber = "(([-+]?" + nonNumber + ")|" +
+                positiveNonNumber + "|" +
+                negativeNonNumber + ")";
+        floatPattern = Pattern.compile(decimal + "|" + hexFloat + "|" +
+                signedNonNumber);
+        decimalPattern = Pattern.compile(decimal);
+    }
+
+    private Pattern floatPattern() {
+        if (floatPattern == null) {
+            buildFloatAndDecimalPattern();
+        }
+        return floatPattern;
+    }
+
+    private Pattern decimalPattern() {
+        if (decimalPattern == null) {
+            buildFloatAndDecimalPattern();
+        }
+        return decimalPattern;
     }
 
     // Private primitives used to support scanning
@@ -677,9 +636,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
             position = matcher.end();
         }
         // If we are sitting at the end, no more tokens in buffer
-        if (position == buf.limit())
-            return false;
-        return true;
+        return position != buf.limit();
     }
 
     /*
@@ -882,14 +839,13 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * <p>Attempting to perform search operations after a HackScanner has
      * been closed will result in an {@link IllegalStateException}.
-     *
      */
     public void close() {
         if (closed)
             return;
         if (source instanceof Closeable) {
             try {
-                ((Closeable)source).close();
+                ((Closeable) source).close();
             } catch (IOException ioe) {
                 lastException = ioe;
             }
@@ -1069,7 +1025,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      */
     public HackScanner useRadix(int radix) {
         if ((radix < Character.MIN_RADIX) || (radix > Character.MAX_RADIX))
-            throw new IllegalArgumentException("radix:"+radix);
+            throw new IllegalArgumentException("radix:" + radix);
 
         if (this.defaultRadix == radix)
             return this;
@@ -1084,7 +1040,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
     // the default is left untouched.
     private void setRadix(int radix) {
         if ((radix < Character.MIN_RADIX) || (radix > Character.MAX_RADIX))
-            throw new IllegalArgumentException("radix:"+radix);
+            throw new IllegalArgumentException("radix:" + radix);
 
         if (this.radix != radix) {
             // Force rebuilding and recompilation of radix dependent patterns
@@ -1110,7 +1066,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * methods will make a match available if they succeed.
      *
      * @return a match result for the last match operation
-     * @throws IllegalStateException  If no match result is available
+     * @throws IllegalStateException If no match result is available
      */
     public MatchResult match() {
         if (!matchValid)
@@ -1123,26 +1079,25 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * string representation of a {@code Scanner} contains information
      * that may be useful for debugging. The exact format is unspecified.
      *
-     * @return  The string representation of this scanner
+     * @return The string representation of this scanner
      */
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("java.util.Scanner");
-        sb.append("[delimiters=" + delimPattern + "]");
-        sb.append("[position=" + position + "]");
-        sb.append("[match valid=" + matchValid + "]");
-        sb.append("[need input=" + needInput + "]");
-        sb.append("[source closed=" + sourceClosed + "]");
-        sb.append("[skipped=" + skipped + "]");
-        sb.append("[group separator=" + groupSeparator + "]");
-        sb.append("[decimal separator=" + decimalSeparator + "]");
-        sb.append("[positive prefix=" + positivePrefix + "]");
-        sb.append("[negative prefix=" + negativePrefix + "]");
-        sb.append("[positive suffix=" + positiveSuffix + "]");
-        sb.append("[negative suffix=" + negativeSuffix + "]");
-        sb.append("[NaN string=" + nanString + "]");
-        sb.append("[infinity string=" + infinityString + "]");
-        return sb.toString();
+        String sb = "java.util.Scanner" +
+                "[delimiters=" + delimPattern + "]" +
+                "[position=" + position + "]" +
+                "[match valid=" + matchValid + "]" +
+                "[need input=" + needInput + "]" +
+                "[source closed=" + sourceClosed + "]" +
+                "[skipped=" + skipped + "]" +
+                "[group separator=" + groupSeparator + "]" +
+                "[decimal separator=" + decimalSeparator + "]" +
+                "[positive prefix=" + positivePrefix + "]" +
+                "[negative prefix=" + negativePrefix + "]" +
+                "[positive suffix=" + positiveSuffix + "]" +
+                "[negative suffix=" + negativeSuffix + "]" +
+                "[NaN string=" + nanString + "]" +
+                "[infinity string=" + infinityString + "]";
+        return sb;
     }
 
     /**
@@ -1177,7 +1132,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @return the next token
      * @throws NoSuchElementException if no more tokens are available
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      * @see java.util.Iterator
      */
     public String next() {
@@ -1219,10 +1174,10 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param pattern a string specifying the pattern to scan
      * @return true if and only if this HackScanner has another token matching
-     *         the specified pattern
+     * the specified pattern
      * @throws IllegalStateException if this HackScanner is closed
      */
-    public boolean hasNext(String pattern)  {
+    public boolean hasNext(String pattern) {
         return hasNext(patternCache.forName(pattern));
     }
 
@@ -1238,9 +1193,9 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * @param pattern a string specifying the pattern to scan
      * @return the next token
      * @throws NoSuchElementException if no such tokens are available
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
-    public String next(String pattern)  {
+    public String next(String pattern) {
         return next(patternCache.forName(pattern));
     }
 
@@ -1252,7 +1207,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param pattern the pattern to scan for
      * @return true if and only if this HackScanner has another token matching
-     *         the specified pattern
+     * the specified pattern
      * @throws IllegalStateException if this HackScanner is closed
      */
     public boolean hasNext(Pattern pattern) {
@@ -1286,7 +1241,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * @param pattern the pattern to scan for
      * @return the next token
      * @throws NoSuchElementException if no more tokens are available
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public String next(Pattern pattern) {
         ensureOpen();
@@ -1346,7 +1301,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
     /**
      * Advances this HackScanner past the current line and returns the input
      * that was skipped.
-     *
+     * <p>
      * This method returns the rest of the current line, excluding any line
      * separator at the end. The position is set to the beginning of the next
      * line.
@@ -1357,7 +1312,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @return the line that was skipped
      * @throws NoSuchElementException if no line was found
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public String nextLine() {
         modCount++;
@@ -1458,7 +1413,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * @param pattern a string specifying the pattern to search for
      * @param horizon the search horizon
      * @return the text that matched the specified pattern
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if horizon is negative
      */
     public String findWithinHorizon(String pattern, int horizon) {
@@ -1493,7 +1448,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * @param pattern the pattern to scan for
      * @param horizon the search horizon
      * @return the text that matched the specified pattern
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if horizon is negative
      */
     public String findWithinHorizon(Pattern pattern, int horizon) {
@@ -1540,7 +1495,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * @param pattern a string specifying the pattern to skip over
      * @return this scanner
      * @throws NoSuchElementException if the specified pattern is not found
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public HackScanner skip(Pattern pattern) {
         ensureOpen();
@@ -1588,10 +1543,10 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * advance past the input that matched.
      *
      * @return true if and only if this scanner's next token is a valid
-     *         boolean value
+     * boolean value
      * @throws IllegalStateException if this HackScanner is closed
      */
-    public boolean hasNextBoolean()  {
+    public boolean hasNextBoolean() {
         return hasNext(boolPattern());
     }
 
@@ -1605,9 +1560,9 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * @return the boolean scanned from the input
      * @throws InputMismatchException if the next token is not a valid boolean
      * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
-    public boolean nextBoolean()  {
+    public boolean nextBoolean() {
         clearCaches();
         return Boolean.parseBoolean(next(boolPattern()));
     }
@@ -1618,7 +1573,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * {@link #nextByte} method. The HackScanner does not advance past any input.
      *
      * @return true if and only if this scanner's next token is a valid
-     *         byte value
+     * byte value
      * @throws IllegalStateException if this HackScanner is closed
      */
     public boolean hasNextByte() {
@@ -1636,8 +1591,8 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token as a byte value
      * @return true if and only if this scanner's next token is a valid
-     *         byte value
-     * @throws IllegalStateException if this HackScanner is closed
+     * byte value
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public boolean hasNextByte(int radix) {
@@ -1665,11 +1620,10 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * is the default radix of this scanner.
      *
      * @return the {@code byte} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
+     * @throws InputMismatchException if the next token does not match the <i>Integer</i>
+     *                                regular expression, or is out of range
      * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public byte nextByte() {
         return nextByte(defaultRadix);
@@ -1699,18 +1653,17 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token as a byte value
      * @return the {@code byte} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
-     * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws InputMismatchException   if the next token does not match the <i>Integer</i>
+     *                                  regular expression, or is out of range
+     * @throws NoSuchElementException   if input is exhausted
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public byte nextByte(int radix) {
         // Check cached result
         if ((typeCache != null) && (typeCache instanceof Byte)
                 && this.radix == radix) {
-            byte val = ((Byte)typeCache).byteValue();
+            byte val = ((Byte) typeCache).byteValue();
             useTypeCache();
             return val;
         }
@@ -1734,7 +1687,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * {@link #nextShort} method. The HackScanner does not advance past any input.
      *
      * @return true if and only if this scanner's next token is a valid
-     *         short value in the default radix
+     * short value in the default radix
      * @throws IllegalStateException if this HackScanner is closed
      */
     public boolean hasNextShort() {
@@ -1752,8 +1705,8 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token as a short value
      * @return true if and only if this scanner's next token is a valid
-     *         short value in the specified radix
-     * @throws IllegalStateException if this HackScanner is closed
+     * short value in the specified radix
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public boolean hasNextShort(int radix) {
@@ -1781,11 +1734,10 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * is the default radix of this scanner.
      *
      * @return the {@code short} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
+     * @throws InputMismatchException if the next token does not match the <i>Integer</i>
+     *                                regular expression, or is out of range
      * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public short nextShort() {
         return nextShort(defaultRadix);
@@ -1815,18 +1767,17 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token as a short value
      * @return the {@code short} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
-     * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws InputMismatchException   if the next token does not match the <i>Integer</i>
+     *                                  regular expression, or is out of range
+     * @throws NoSuchElementException   if input is exhausted
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public short nextShort(int radix) {
         // Check cached result
         if ((typeCache != null) && (typeCache instanceof Short)
                 && this.radix == radix) {
-            short val = ((Short)typeCache).shortValue();
+            short val = ((Short) typeCache).shortValue();
             useTypeCache();
             return val;
         }
@@ -1850,7 +1801,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * {@link #nextInt} method. The HackScanner does not advance past any input.
      *
      * @return true if and only if this scanner's next token is a valid
-     *         int value
+     * int value
      * @throws IllegalStateException if this HackScanner is closed
      */
     public boolean hasNextInt() {
@@ -1868,8 +1819,8 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token as an int value
      * @return true if and only if this scanner's next token is a valid
-     *         int value
-     * @throws IllegalStateException if this HackScanner is closed
+     * int value
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public boolean hasNextInt(int radix) {
@@ -1894,7 +1845,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * before parse will accept it.
      */
     private String processIntegerToken(String token) {
-        String result = token.replaceAll(""+groupSeparator, "");
+        String result = token.replaceAll(groupSeparator, "");
         boolean isNegative = false;
         int preLen = negativePrefix.length();
         if ((preLen > 0) && result.startsWith(negativePrefix)) {
@@ -1904,8 +1855,8 @@ public final class HackScanner implements Iterator<String>, Closeable {
         int sufLen = negativeSuffix.length();
         if ((sufLen > 0) && result.endsWith(negativeSuffix)) {
             isNegative = true;
-            result = result.substring(result.length() - sufLen,
-                    result.length());
+            result = result.substring(result.length() - sufLen
+            );
         }
         if (isNegative)
             result = "-" + result;
@@ -1921,11 +1872,10 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * is the default radix of this scanner.
      *
      * @return the {@code int} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
+     * @throws InputMismatchException if the next token does not match the <i>Integer</i>
+     *                                regular expression, or is out of range
      * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public int nextInt() {
         return nextInt(defaultRadix);
@@ -1955,18 +1905,17 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token as an int value
      * @return the {@code int} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
-     * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws InputMismatchException   if the next token does not match the <i>Integer</i>
+     *                                  regular expression, or is out of range
+     * @throws NoSuchElementException   if input is exhausted
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public int nextInt(int radix) {
         // Check cached result
         if ((typeCache != null) && (typeCache instanceof Integer)
                 && this.radix == radix) {
-            int val = ((Integer)typeCache).intValue();
+            int val = ((Integer) typeCache).intValue();
             useTypeCache();
             return val;
         }
@@ -1990,7 +1939,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * {@link #nextLong} method. The HackScanner does not advance past any input.
      *
      * @return true if and only if this scanner's next token is a valid
-     *         long value
+     * long value
      * @throws IllegalStateException if this HackScanner is closed
      */
     public boolean hasNextLong() {
@@ -2008,8 +1957,8 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token as a long value
      * @return true if and only if this scanner's next token is a valid
-     *         long value
-     * @throws IllegalStateException if this HackScanner is closed
+     * long value
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public boolean hasNextLong(int radix) {
@@ -2037,11 +1986,10 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * is the default radix of this scanner.
      *
      * @return the {@code long} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
+     * @throws InputMismatchException if the next token does not match the <i>Integer</i>
+     *                                regular expression, or is out of range
      * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public long nextLong() {
         return nextLong(defaultRadix);
@@ -2071,18 +2019,17 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token as an int value
      * @return the {@code long} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
-     * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws InputMismatchException   if the next token does not match the <i>Integer</i>
+     *                                  regular expression, or is out of range
+     * @throws NoSuchElementException   if input is exhausted
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public long nextLong(int radix) {
         // Check cached result
         if ((typeCache != null) && (typeCache instanceof Long)
                 && this.radix == radix) {
-            long val = ((Long)typeCache).longValue();
+            long val = ((Long) typeCache).longValue();
             useTypeCache();
             return val;
         }
@@ -2103,7 +2050,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * The float token must be stripped of prefixes, group separators,
      * and suffixes, non ascii digits must be converted into ascii digits
      * before parseFloat will accept it.
-     *
+     * <p>
      * If there are non-ascii digits in the token these digits must
      * be processed before the token is passed to parseFloat.
      */
@@ -2120,8 +2067,8 @@ public final class HackScanner implements Iterator<String>, Closeable {
         int sufLen = negativeSuffix.length();
         if ((sufLen > 0) && result.endsWith(negativeSuffix)) {
             isNegative = true;
-            result = result.substring(result.length() - sufLen,
-                    result.length());
+            result = result.substring(result.length() - sufLen
+            );
         }
         if (result.equals(nanString))
             result = "NaN";
@@ -2134,7 +2081,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
         Matcher m = NON_ASCII_DIGIT.matcher(result);
         if (m.find()) {
             StringBuilder inASCII = new StringBuilder();
-            for (int i=0; i<result.length(); i++) {
+            for (int i = 0; i < result.length(); i++) {
                 char nextChar = result.charAt(i);
                 if (Character.isDigit(nextChar)) {
                     int d = Character.digit(nextChar, 10);
@@ -2158,7 +2105,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * method. The HackScanner does not advance past any input.
      *
      * @return true if and only if this scanner's next token is a valid
-     *         float value
+     * float value
      * @throws IllegalStateException if this HackScanner is closed
      */
     public boolean hasNextFloat() {
@@ -2196,16 +2143,15 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * appropriate.
      *
      * @return the {@code float} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Float</i>
-     *         regular expression, or is out of range
+     * @throws InputMismatchException if the next token does not match the <i>Float</i>
+     *                                regular expression, or is out of range
      * @throws NoSuchElementException if input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public float nextFloat() {
         // Check cached result
         if ((typeCache != null) && (typeCache instanceof Float)) {
-            float val = ((Float)typeCache).floatValue();
+            float val = ((Float) typeCache).floatValue();
             useTypeCache();
             return val;
         }
@@ -2225,7 +2171,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * method. The HackScanner does not advance past any input.
      *
      * @return true if and only if this scanner's next token is a valid
-     *         double value
+     * double value
      * @throws IllegalStateException if this HackScanner is closed
      */
     public boolean hasNextDouble() {
@@ -2263,16 +2209,15 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * appropriate.
      *
      * @return the {@code double} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Float</i>
-     *         regular expression, or is out of range
+     * @throws InputMismatchException if the next token does not match the <i>Float</i>
+     *                                regular expression, or is out of range
      * @throws NoSuchElementException if the input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public double nextDouble() {
         // Check cached result
         if ((typeCache != null) && (typeCache instanceof Double)) {
-            double val = ((Double)typeCache).doubleValue();
+            double val = ((Double) typeCache).doubleValue();
             useTypeCache();
             return val;
         }
@@ -2296,7 +2241,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * input.
      *
      * @return true if and only if this scanner's next token is a valid
-     *         {@code BigInteger}
+     * {@code BigInteger}
      * @throws IllegalStateException if this HackScanner is closed
      */
     public boolean hasNextBigInteger() {
@@ -2315,8 +2260,8 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token as an integer
      * @return true if and only if this scanner's next token is a valid
-     *         {@code BigInteger}
-     * @throws IllegalStateException if this HackScanner is closed
+     * {@code BigInteger}
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public boolean hasNextBigInteger(int radix) {
@@ -2345,11 +2290,10 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * is the default radix of this scanner.
      *
      * @return the {@code BigInteger} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
+     * @throws InputMismatchException if the next token does not match the <i>Integer</i>
+     *                                regular expression, or is out of range
      * @throws NoSuchElementException if the input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public BigInteger nextBigInteger() {
         return nextBigInteger(defaultRadix);
@@ -2374,11 +2318,10 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param radix the radix used to interpret the token
      * @return the {@code BigInteger} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Integer</i>
-     *         regular expression, or is out of range
-     * @throws NoSuchElementException if the input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws InputMismatchException   if the next token does not match the <i>Integer</i>
+     *                                  regular expression, or is out of range
+     * @throws NoSuchElementException   if the input is exhausted
+     * @throws IllegalStateException    if this HackScanner is closed
      * @throws IllegalArgumentException if the radix is out of range
      */
     public BigInteger nextBigInteger(int radix) {
@@ -2409,7 +2352,7 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * input.
      *
      * @return true if and only if this scanner's next token is a valid
-     *         {@code BigDecimal}
+     * {@code BigDecimal}
      * @throws IllegalStateException if this HackScanner is closed
      */
     public boolean hasNextBigDecimal() {
@@ -2440,11 +2383,10 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * constructor.
      *
      * @return the {@code BigDecimal} scanned from the input
-     * @throws InputMismatchException
-     *         if the next token does not match the <i>Decimal</i>
-     *         regular expression, or is out of range
+     * @throws InputMismatchException if the next token does not match the <i>Decimal</i>
+     *                                regular expression, or is out of range
      * @throws NoSuchElementException if the input is exhausted
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws IllegalStateException  if this HackScanner is closed
      */
     public BigDecimal nextBigDecimal() {
         // Check cached result
@@ -2502,8 +2444,9 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * <p>This method might block waiting for more input.
      *
-     * @apiNote
-     * For example, the following code will create a list of
+     * @return a sequential stream of token strings
+     * @throws IllegalStateException if this HackScanner is closed
+     * @apiNote For example, the following code will create a list of
      * comma-delimited tokens from a string:
      *
      * <pre>{@code
@@ -2515,44 +2458,12 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * <p>The resulting list would contain {@code "abc"}, {@code "def"},
      * the empty string, and {@code "ghi"}.
-     *
-     * @return a sequential stream of token strings
-     * @throws IllegalStateException if this HackScanner is closed
      * @since 9
      */
     public Stream<String> tokens() {
         ensureOpen();
         Stream<String> stream = StreamSupport.stream(new TokenSpliterator(), false);
         return stream.onClose(this::close);
-    }
-
-    class TokenSpliterator extends Spliterators.AbstractSpliterator<String> {
-        int expectedCount = -1;
-
-        TokenSpliterator() {
-            super(Long.MAX_VALUE,
-                    Spliterator.IMMUTABLE | Spliterator.NONNULL | Spliterator.ORDERED);
-        }
-
-        @Override
-        public boolean tryAdvance(Consumer<? super String> cons) {
-            if (expectedCount >= 0 && expectedCount != modCount) {
-                throw new ConcurrentModificationException();
-            }
-
-            if (hasNext()) {
-                String token = next();
-                expectedCount = modCount;
-                cons.accept(token);
-                if (expectedCount != modCount) {
-                    throw new ConcurrentModificationException();
-                }
-                return true;
-            } else {
-                expectedCount = modCount;
-                return false;
-            }
-        }
     }
 
     /**
@@ -2586,8 +2497,11 @@ public final class HackScanner implements Iterator<String>, Closeable {
      * might block waiting for additional input, and it might buffer an unbounded amount of
      * input searching for a match.
      *
-     * @apiNote
-     * For example, the following code will read a file and return a list
+     * @param pattern the pattern to be matched
+     * @return a sequential stream of match results
+     * @throws NullPointerException  if pattern is null
+     * @throws IllegalStateException if this HackScanner is closed
+     * @apiNote For example, the following code will read a file and return a list
      * of all sequences of characters consisting of seven or more Latin capital
      * letters:
      *
@@ -2599,11 +2513,6 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *                               .collect(Collectors.toList());
      * }
      * }</pre>
-     *
-     * @param pattern the pattern to be matched
-     * @return a sequential stream of match results
-     * @throws NullPointerException if pattern is null
-     * @throws IllegalStateException if this HackScanner is closed
      * @since 9
      */
     public Stream<MatchResult> findAll(Pattern pattern) {
@@ -2623,16 +2532,93 @@ public final class HackScanner implements Iterator<String>, Closeable {
      *
      * @param patString the pattern string
      * @return a sequential stream of match results
-     * @throws NullPointerException if patString is null
-     * @throws IllegalStateException if this HackScanner is closed
+     * @throws NullPointerException   if patString is null
+     * @throws IllegalStateException  if this HackScanner is closed
      * @throws PatternSyntaxException if the regular expression's syntax is invalid
-     * @since 9
      * @see java.util.regex.Pattern
+     * @since 9
      */
     public Stream<MatchResult> findAll(String patString) {
         Objects.requireNonNull(patString);
         ensureOpen();
         return findAll(patternCache.forName(patString));
+    }
+
+    /**
+     * Small LRU cache of Patterns.
+     */
+    private static class PatternLRUCache {
+
+        private final int size;
+        private Pattern[] oa = null;
+
+        PatternLRUCache(int size) {
+            this.size = size;
+        }
+
+        boolean hasName(Pattern p, String s) {
+            return p.pattern().equals(s);
+        }
+
+        void moveToFront(Object[] oa, int i) {
+            Object ob = oa[i];
+            for (int j = i; j > 0; j--)
+                oa[j] = oa[j - 1];
+            oa[0] = ob;
+        }
+
+        Pattern forName(String name) {
+            if (oa == null) {
+                Pattern[] temp = new Pattern[size];
+                oa = temp;
+            } else {
+                for (int i = 0; i < oa.length; i++) {
+                    Pattern ob = oa[i];
+                    if (ob == null)
+                        continue;
+                    if (hasName(ob, name)) {
+                        if (i > 0)
+                            moveToFront(oa, i);
+                        return ob;
+                    }
+                }
+            }
+
+            // Create a new object
+            Pattern ob = Pattern.compile(name);
+            oa[oa.length - 1] = ob;
+            moveToFront(oa, oa.length - 1);
+            return ob;
+        }
+    }
+
+    class TokenSpliterator extends Spliterators.AbstractSpliterator<String> {
+        int expectedCount = -1;
+
+        TokenSpliterator() {
+            super(Long.MAX_VALUE,
+                    Spliterator.IMMUTABLE | Spliterator.NONNULL | Spliterator.ORDERED);
+        }
+
+        @Override
+        public boolean tryAdvance(Consumer<? super String> cons) {
+            if (expectedCount >= 0 && expectedCount != modCount) {
+                throw new ConcurrentModificationException();
+            }
+
+            if (hasNext()) {
+                String token = next();
+                expectedCount = modCount;
+                cons.accept(token);
+                if (expectedCount != modCount) {
+                    throw new ConcurrentModificationException();
+                }
+                return true;
+            } else {
+                expectedCount = modCount;
+                return false;
+            }
+        }
     }
 
     class FindSpliterator extends Spliterators.AbstractSpliterator<MatchResult> {
@@ -2697,52 +2683,6 @@ public final class HackScanner implements Iterator<String>, Closeable {
             if (!sourceClosed)
                 needInput = true;
             return false;
-        }
-    }
-
-    /** Small LRU cache of Patterns. */
-    private static class PatternLRUCache {
-
-        private Pattern[] oa = null;
-        private final int size;
-
-        PatternLRUCache(int size) {
-            this.size = size;
-        }
-
-        boolean hasName(Pattern p, String s) {
-            return p.pattern().equals(s);
-        }
-
-        void moveToFront(Object[] oa, int i) {
-            Object ob = oa[i];
-            for (int j = i; j > 0; j--)
-                oa[j] = oa[j - 1];
-            oa[0] = ob;
-        }
-
-        Pattern forName(String name) {
-            if (oa == null) {
-                Pattern[] temp = new Pattern[size];
-                oa = temp;
-            } else {
-                for (int i = 0; i < oa.length; i++) {
-                    Pattern ob = oa[i];
-                    if (ob == null)
-                        continue;
-                    if (hasName(ob, name)) {
-                        if (i > 0)
-                            moveToFront(oa, i);
-                        return ob;
-                    }
-                }
-            }
-
-            // Create a new object
-            Pattern ob = Pattern.compile(name);
-            oa[oa.length - 1] = ob;
-            moveToFront(oa, oa.length - 1);
-            return ob;
         }
     }
 }

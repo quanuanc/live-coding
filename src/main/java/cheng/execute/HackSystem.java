@@ -8,12 +8,12 @@ import java.nio.channels.Channel;
 import java.util.Properties;
 
 public class HackSystem {
-    private HackSystem() {
-    }
-
     public static final InputStream in = new HackInputStream();
     public static final PrintStream out = new HackPrintStream();
     public static final PrintStream err = out;
+
+    private HackSystem() {
+    }
 
     public static String getBufferString() {
         return out.toString();
@@ -65,12 +65,12 @@ public class HackSystem {
         throw new SecurityException("Use hazardous method: System.getProperties().");
     }
 
-    public static String lineSeparator() {
-        return System.lineSeparator();
-    }
-
     public static void setProperties(Properties props) {
         throw new SecurityException("Use hazardous method: System.setProperties().");
+    }
+
+    public static String lineSeparator() {
+        return System.lineSeparator();
     }
 
     public static String getProperty(String key) {
