@@ -3,12 +3,13 @@ package cheng.controller;
 import cheng.service.ExecuteStringSourceService;
 import cheng.vo.Input;
 import cheng.vo.Output;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api")
-public class IndexController {
+@RequiredArgsConstructor
+public class ApiController {
     private static final String DEFAULT_SOURCE = """
             public class Run {
                 public static void main(String[] args){
@@ -17,10 +18,6 @@ public class IndexController {
             }
             """;
     private final ExecuteStringSourceService executeStringSourceService;
-    @Autowired
-    public IndexController(ExecuteStringSourceService executeStringSourceService) {
-        this.executeStringSourceService = executeStringSourceService;
-    }
 
     @GetMapping
     public Output home() {
