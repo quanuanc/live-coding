@@ -2,6 +2,7 @@ package cheng.controller;
 
 import cheng.service.ExecuteStringSourceService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 @Controller
 @RequiredArgsConstructor
+@Slf4j
 public class RunCodeController {
     private static final String DEFAULT_SOURCE = """
             import java.util.Scanner;
@@ -28,6 +30,7 @@ public class RunCodeController {
 
     @GetMapping("/")
     public String entry(Model model) {
+        log.info("entry");
         model.addAttribute("lastSource", DEFAULT_SOURCE);
         model.addAttribute("lastSystemIn", DEFAULT_SYSTEM_IN);
         return "ide";
@@ -43,6 +46,8 @@ public class RunCodeController {
         model.addAttribute("lastSource", source);
         model.addAttribute("lastSystemIn", systemIn);
         model.addAttribute("runResult", runResult);
+
+        log.debug("runResult:{}", runResult);
 
         return "ide";
     }
